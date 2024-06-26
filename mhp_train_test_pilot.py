@@ -11,7 +11,10 @@ Original file is located at
 _Preprocesses, trains, tests (5-fold CV), and ranks feature importance of mental health professional (MHP) response quality targets while replying to appointment queries, using binary XGBoost classifiers. Fine tunes and evaluates (5-fold CV) rationale-augmented MHP response quality targets across BERT, RoBERTa, and DistilBERT pretrained LMs._
 
 > mhp_train_test_pilot.ipynb<br>
-> Simone J. Skeen (06-25-2024)
+> Simone J. Skeen (06-26-2024)
+
+### Preparation
+Installs and imports packages, mounts gdrive, calibrates output preferences.
 """
 
 # Commented out IPython magic to ensure Python compatibility.
@@ -32,6 +35,7 @@ import pandas as pd
 import re
 import seaborn as sns
 import spacy
+#import stata_setup
 import string
 import wandb.sdk
 import warnings
@@ -88,6 +92,7 @@ drive.mount(
 # %cd gdrive/My Drive/Colab/mhp_subtle_discrimination/data
 
 """###Pre-annotation
+Imports raw parent study data, reduces, annonymizes, for annotation tasks.
 ***
 
 **_Import_**
@@ -156,6 +161,7 @@ d = d[d['response'] == 1.0]
 le = LabelEncoder()
 
 outcomes = [
+            'first_email',
             'consult',
             'appointment',
             'reject',
@@ -177,11 +183,21 @@ for outcome in outcomes:
                             }, inplace = True,
                        )
 
+# Reindex
+
+d = d.reset_index()
+d = d.drop(
+           'index',
+           axis = 1,
+           )
+
+d.index.name = 'index'
+
 d.shape
 d.dtypes
 d.head(3)
 
-"""**_Preprocess_**"""
+"""**_Anonymize_**"""
 
 # Define spaCy NE redaction Fx
 
@@ -195,7 +211,7 @@ def redact_ne(mhp_text):
                'NORP',     ### nationalities or religious or political groups
                'FAC',      ### buildings, airports, highways, bridges, etc.
                'ORG',      ### companies, agencies, institutions, etc.
-               'GPE',     ### countries, cities, states
+               'GPE',      ### countries, cities, states
                'LOC',      ### non-GPE locations, mountain ranges, bodies of water
                'PRODUCT',  ### objects, vehicles, foods, etc. (not services)
                'EVENT',    ### named hurricanes, battles, wars, sports events, etc.
@@ -224,7 +240,8 @@ d['text'] = d['text'].astype(str).apply(lambda i: redact_ne(i))
 d['text'] = d['text'].apply(lambda i: re.sub(
                                              r'\d+',
                                              ' ',
-                                             i)
+                                             i,
+                                             )
                             )
 
 # Harmonize manual redactions
@@ -244,7 +261,7 @@ d['text'] = d['text'].astype(str).apply(lambda i: reduce(
                                         )
 
 
-                           )
+#                           )
 
 d['text'] = d['text'].astype(str).apply(lambda i: i.replace(
                                                             '\n',
@@ -252,28 +269,38 @@ d['text'] = d['text'].astype(str).apply(lambda i: i.replace(
                                                             )
                                         )
 
+
+
+
 d.head(3)
+
+"""**_Export for annotation_**"""
 
 d.to_excel('d_anon.xlsx')
 
-
-
-
-
-
-
-
-
-
-
 """### Post-annotation
+Cleans, formats, and augments _n_ = 755 annotated pilot dataset.
 ***
+
+**_Import_**
 """
 
-# Replace NaN
+# Commented out IPython magic to ensure Python compatibility.
+# %%capture
+# 
+# d = pd.read_excel(
+#                   'd_annotated_pilot.xlsx',
+#                   index_col = 0,
+#                   )
+# 
+# d.shape
+# d.dtypes
+# d.head(3)
+
+"""**_Replace NaN_**"""
 
 targets = [
-           'prob', ### prob = _not_ coherent target; exploratory-qualitative only
+           'prob', ### prob = exploratory-qualitative only
            'refl',
            'just',
            'afrm',
@@ -287,67 +314,226 @@ for target in targets:
                      inplace = True,
                      )
 
+# Export condensed, non-augmented, dataset for cluster
+
+d_analysis_pilot = d[[
+                      'text',
+                      'prob',
+                      'refl',
+                      'just',
+                      'afrm',
+                      'fit',
+                      'agnt',
+                      'rationale',
+                      ]].copy()
+
+d_analysis_pilot.to_excel('d_analysis_pilot.xlsx')
+
+"""**_Augment_**"""
+
+# Encode 'target'
+
+d['target'] = d[[
+                 'refl',
+                 'just',
+                 'afrm',
+                 'fit',
+                 'agnt',
+                 ]].apply(
+                          lambda row: 1 if any(row) else 0,
+                          axis = 1,
+                          )
+
+#d.head(3)
+
+def augment(df):
+    '''Identifies all pos(1) target rows, duplicates as new row, replaces new row text cell with rationale'''
+    new_rows = []
+    for index, row in df.iterrows():
+        if row['target'] > 0:
+            new_row = row.copy()  # Create a copy for the new row
+            new_row['text'] = row['rationale']  # Modify 'text' in the NEW row
+            new_rows.append((index + 0.5, new_row))  # Use fractional index for insertion
+
+    # Insert new rows and sort by index
+    for index, new_row in new_rows:
+        df = pd.concat([df.iloc[:int(index)],
+                        pd.DataFrame([new_row], index=[index]),
+                        df.iloc[int(index):]])
+    df = df.sort_index().reset_index(drop=True)
+    return df
+
+d = augment(d.copy())  # Create a copy to avoid modifying the original DataFrame
+
+d.shape
 d.head(3)
-
-# Encode audit study outcomes
-
-        ### _note_: exploratory
-
-le = LabelEncoder()
-
-outcomes = [
-            'consult',
-            'appointment',
-            'reject',
-            ]
-
-
-for outcome in outcomes:
-    if d[outcome].isnull().any():
-        d[outcome].fillna('unknown', inplace = True) ### NaNs recoded
-
-    d[outcome] = le.fit_transform(d[outcome])
-    d[outcome].replace({
-                        2: 1,
-                        1: 0,
-                            }, inplace = True)
-
-d.head(3)
-
-# Drop pilot preprocessing
-
-        ### _note_ 3/26: drop exploratorily preprocessed data from pilot runs
-
-d.drop(
-       'text_response_pre',
-       axis = 1,
-       inplace = True,
-       )
-
-d.columns
 
 # Drop annotation artifacts
 
 artifacts = [
              '<PII>', ### <PII> _only_ in non-augmented data
-             #'<PROB>',
-             #'<JUST>',
-             #'<AFRM>',
-             #'<FIT>',
-             #'<AGNT>',
-             #'<REFL>',
+             '<PROB>',
+             '<JUST>',
+             '<AFRM>',
+             '<FIT>',
+             '<AGNT>',
+             '<REFL>',
+             '[PHONE NUMBER]',
              ]
 
 for artifact in artifacts:
-    d['text_response_anon'] = d['text_response_anon'].str.replace(artifact, ' ', regex = True)
+    d['text'] = d['text'].str.replace(
+                                      artifact,
+                                      ' ',
+                                      regex = True,
+                                      )
 
-        ### SJS 3/24: artifacts = perfect 1:1 x_pred; must excise in annotated data
+d.to_excel('d_augmented_pilot.xlsx')
 
-d.to_csv('d_inspect.csv', index = False)
+"""### Latent Class Analysis
+Detects latent response-quality outcome, visualizes latent class distribution.
+***
 
-# Verify
+#### PyStata
+"""
 
-d.head(3)
+# Initialize
+
+#stata_setup.config('C:/Program Files/Stata18', 'se'
+
+"""**_mhp_latent_class_pilot.do_**"""
+
+*--------------------------------------------------------------------------------------------------
+*
+*	Linguistic markers of subtle discrimination among mental healthcare professionals
+*		mhp_latent_class_pilot.do
+*		Simone J. Skeen (06-26-2024)
+*
+*--------------------------------------------------------------------------------------------------
+
+* Preparation
+
+cd "C:\Users\sskee\OneDrive\Documents\02_tulane\01_research\tu_ceai\mhp_subtle_discrimination\data\wave 1"
+import excel d_analysis_pilot, firstrow case(lower)
+describe
+
+rename fit fitt
+
+* Pilot LCA
+
+		*** SJS 6/26: removing agnt: too sparse, doesn't tap mhp semantics ie. separate MoA
+
+*gsem (refl just afrm fitt <- _cons), family(bernoulli) link(logit) lclass(C 3) nonrtolerance
+*estat lcprob
+*estat lcmean
+*marginsplot, noci
+
+* Class enumeration: fit indices per _k_ classes
+
+quietly gsem (refl just afrm fitt <- ), family(bernoulli) link(logit) lclass(rq 1) iter(1000) nonrtolerance
+estimates store one_C
+
+quietly gsem (refl just afrm fitt <- ), family(bernoulli) link(logit) lclass(rq 2) iter(1000) nonrtolerance
+estimates store two_C
+
+quietly gsem (refl just afrm fitt <- ), family(bernoulli) link(logit) lclass(rq 3) iter(1000) nonrtolerance
+estimates store three_C
+
+estimates stats one_C two_C three_C
+
+* Optimal: _k_ = 2-class solution
+
+quietly gsem (refl just afrm fitt <- ), family(bernoulli) link(logit) lclass(rq 2) iter(1000) nonrtolerance startvalues(randompr, draws(20) seed(56))
+estimates store rq_2
+
+* Latent class marginal probabilities
+
+estat lcprob
+
+* Goodness of fit
+
+estat lcgof
+
+* Class-specific conditional means
+
+estat lcmean, nose
+marginsplot, noci
+
+* Posterior probability of class membership for each observation
+
+predict cpr*, classposteriorpr
+list refl just afrm fitt cp* in 1/30
+
+* Gen predclass var
+
+		*** JN 11/9: gen var for predicted class membership;
+
+		*** JN 11/9: gen max posterior probability for each class, assign each ob to predicted class.
+
+egen maxpr = rowmax(cpr*)
+gen predclass = 1 if cpr1==maxpr
+replace predclass = 2 if cpr2==maxpr
+list cp* maxpr predclass in 1/30
+
+* Class separation
+
+table predclass, statistic(mean cpr1 cpr2)
+
+tab predclass
+
+"""#### Viz."""
+
+d_viz = pd.DataFrame(dict(
+                       value = [0.229704, 0.000001, 0.161597, 0.067374, 0.404319, ### cond mean
+                                0.000001, 0.072105, 0.042612, 0.058599, 0.000001],
+                      variable = ['Affirm', 'Agent', 'Fit', 'Justify', 'Reflect', ### manifest var
+                                  'Affirm', 'Agent', 'Fit', 'Justify', 'Reflect'],
+                      rq_class = ['Engaged (27%)', 'Engaged (27%)', 'Engaged (27%)', 'Engaged (27%)', 'Engaged (27%)',
+                                  'Detached (73%)', 'Detached (73%)', 'Detached (73%)', 'Detached (73%)', 'Detached (73%)']))
+
+fig = px.line_polar(
+                    d_viz,
+                    r = 'value',
+                    theta = 'variable',
+                    line_close = True,
+                    color_discrete_sequence = px.colors.sequential.Plasma_r,
+                    color = 'rq_class',
+                   )
+
+fig.update_layout(
+                  polar = dict(
+                               radialaxis = dict(
+                                                 visible = True,
+                                                 range=[0, 0.5],
+                                                 showticklabels = True,
+                                                 gridwidth = 0,
+                                                 #ticks = ' ',
+                                                ),
+                               angularaxis = dict(
+                                                  showticklabels = True,
+                                                  gridwidth = 0,
+                                                  #ticks = ' ',
+                                                  )
+                               ),
+                  showlegend = True,
+                  #title = 'xx',
+                  #titlefont = {
+                  #             'size': 28,
+                  #             'family':'Serif',
+                  #             },
+                  template = 'plotly_dark',
+                  #paper_bgcolor = 'white',
+                  width = 1000,
+                  height = 800,
+                  )
+
+fig.update_traces(fill = 'toself')
+
+fig.show()
+
+"""### Model A: XGBoost
+***
+"""
 
 # Preprocess
 
@@ -500,10 +686,7 @@ d.loc[t_indices.shift(1, fill_value = False), 'augment'] = 1
 d.head(10)
 #d.to_csv('d_inspect.csv', index = False)
 
-"""### XGBoost
-
-**rskf train-test-feature loop: _not_ augmented**
-"""
+"""**rskf train-test-feature loop: _not_ augmented**"""
 
 targets = [
            'refl',
@@ -648,7 +831,9 @@ for target in targets:
     print(f'\nTop 20 features for {target}:')
     print(top_20_features)
 
-"""### BERT"""
+"""### Model B: BERT(s)
+***
+"""
 
 os.chdir('<my_dir>')
 #%pwd
