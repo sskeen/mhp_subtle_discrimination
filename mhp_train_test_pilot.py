@@ -11,13 +11,15 @@ Original file is located at
 _Preprocesses, trains, tests (5-fold CV), and ranks feature importance of mental health professional (MHP) response quality targets while replying to appointment queries, using binary XGBoost classifiers. Fine tunes and evaluates (5-fold CV) rationale-augmented MHP response quality targets across BERT, RoBERTa, and DistilBERT pretrained LMs._
 
 > mhp_train_test_pilot.ipynb<br>
-> Simone J. Skeen (06-26-2024)
+> Simone J. Skeen (06-28-2024)
 
 ### Preparation
 Installs and imports packages, mounts gdrive, calibrates output preferences.
 """
 
 # Commented out IPython magic to ensure Python compatibility.
+# %pip install bertopic
+# %pip install causalnlp
 # %pip install contractions
 # %pip install simpletransformers
 # %pip install unidecode
@@ -32,6 +34,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
 import re
 import seaborn as sns
 import spacy
@@ -40,10 +44,15 @@ import string
 import wandb.sdk
 import warnings
 
+from bertopic import BERTopic
 from bs4 import BeautifulSoup
+from causalnlp import CausalInferenceModel
+from causalnlp.key_driver_analysis import KeyDriverAnalysis
+from causalnlp.autocoder import Autocoder
 from collections import Counter
 from functools import reduce
 from google.colab import drive
+from hdbscan import HDBSCAN
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.corpus import wordnet
@@ -53,6 +62,7 @@ from nltk.stem import WordNetLemmatizer
 nltk.download('omw-1.4')
 nltk.download('stopwords')
 nltk.download('wordnet')
+from sentence_transformers import SentenceTransformer
 from simpletransformers.classification import ClassificationModel, ClassificationArgs
 from sklearn.preprocessing import LabelEncoder
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
@@ -60,6 +70,7 @@ from sklearn.model_selection import train_test_split, KFold, RepeatedStratifiedK
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import f1_score, average_precision_score, matthews_corrcoef
 from textblob import TextBlob
+from umap import UMAP
 from unidecode import unidecode
 from xgboost import XGBClassifier
 
@@ -314,6 +325,37 @@ for target in targets:
                      inplace = True,
                      )
 
+"""**_Encode intra-textual treatment_**"""
+
+ac = Autocoder()
+
+texts = d['text'].astype(str).tolist()
+
+d = ac.code_custom_topics(
+                          texts,
+                          d,
+                          labels = [
+                                    'transgender',
+                                    'insurance',
+                                    ])
+
+# Binarize
+
+d['t_bin'] = d['transgender'].apply(lambda i: 1 if i > 0.5 else 0)
+d['i_bin'] = d['insurance'].apply(lambda i: 1 if i > 0.5 else 0)
+
+d[[
+   'refl',
+   'just',
+   'afrm',
+   'fit',
+   'agnt',
+   't_bin',
+   'i_bin',
+    ]].apply(pd.Series.value_counts)
+
+d.head(30)
+
 # Export condensed, non-augmented, dataset for cluster
 
 d_analysis_pilot = d[[
@@ -324,6 +366,8 @@ d_analysis_pilot = d[[
                       'afrm',
                       'fit',
                       'agnt',
+                      't_bin',
+                      'i_bin',
                       'rationale',
                       ]].copy()
 
@@ -390,7 +434,7 @@ for artifact in artifacts:
 
 d.to_excel('d_augmented_pilot.xlsx')
 
-"""### Latent Class Analysis
+"""### Latent Class Analysis: PyStata
 Detects latent response-quality outcome, visualizes latent class distribution.
 ***
 
@@ -403,83 +447,7 @@ Detects latent response-quality outcome, visualizes latent class distribution.
 
 """**_mhp_latent_class_pilot.do_**"""
 
-*--------------------------------------------------------------------------------------------------
-*
-*	Linguistic markers of subtle discrimination among mental healthcare professionals
-*		mhp_latent_class_pilot.do
-*		Simone J. Skeen (06-26-2024)
-*
-*--------------------------------------------------------------------------------------------------
-
-* Preparation
-
-cd "C:\Users\sskee\OneDrive\Documents\02_tulane\01_research\tu_ceai\mhp_subtle_discrimination\data\wave 1"
-import excel d_analysis_pilot, firstrow case(lower)
-describe
-
-rename fit fitt
-
-* Pilot LCA
-
-		*** SJS 6/26: removing agnt: too sparse, doesn't tap mhp semantics ie. separate MoA
-
-*gsem (refl just afrm fitt <- _cons), family(bernoulli) link(logit) lclass(C 3) nonrtolerance
-*estat lcprob
-*estat lcmean
-*marginsplot, noci
-
-* Class enumeration: fit indices per _k_ classes
-
-quietly gsem (refl just afrm fitt <- ), family(bernoulli) link(logit) lclass(rq 1) iter(1000) nonrtolerance
-estimates store one_C
-
-quietly gsem (refl just afrm fitt <- ), family(bernoulli) link(logit) lclass(rq 2) iter(1000) nonrtolerance
-estimates store two_C
-
-quietly gsem (refl just afrm fitt <- ), family(bernoulli) link(logit) lclass(rq 3) iter(1000) nonrtolerance
-estimates store three_C
-
-estimates stats one_C two_C three_C
-
-* Optimal: _k_ = 2-class solution
-
-quietly gsem (refl just afrm fitt <- ), family(bernoulli) link(logit) lclass(rq 2) iter(1000) nonrtolerance startvalues(randompr, draws(20) seed(56))
-estimates store rq_2
-
-* Latent class marginal probabilities
-
-estat lcprob
-
-* Goodness of fit
-
-estat lcgof
-
-* Class-specific conditional means
-
-estat lcmean, nose
-marginsplot, noci
-
-* Posterior probability of class membership for each observation
-
-predict cpr*, classposteriorpr
-list refl just afrm fitt cp* in 1/30
-
-* Gen predclass var
-
-		*** JN 11/9: gen var for predicted class membership;
-
-		*** JN 11/9: gen max posterior probability for each class, assign each ob to predicted class.
-
-egen maxpr = rowmax(cpr*)
-gen predclass = 1 if cpr1==maxpr
-replace predclass = 2 if cpr2==maxpr
-list cp* maxpr predclass in 1/30
-
-* Class separation
-
-table predclass, statistic(mean cpr1 cpr2)
-
-tab predclass
+### SJS 6/28: see mhp_latent_class_pilot.do
 
 """#### Viz."""
 
@@ -496,7 +464,12 @@ fig = px.line_polar(
                     r = 'value',
                     theta = 'variable',
                     line_close = True,
-                    color_discrete_sequence = px.colors.sequential.Plasma_r,
+                    #color_discrete_sequence = px.colors.sequential.Plasma_r,
+
+                    color_discrete_sequence = [px.colors.qualitative.Alphabet[13],
+                                              px.colors.qualitative.Alphabet[0]],
+
+
                     color = 'rq_class',
                    )
 
@@ -521,13 +494,16 @@ fig.update_layout(
                   #             'size': 28,
                   #             'family':'Serif',
                   #             },
-                  template = 'plotly_dark',
+                  template = 'plotly_white',
                   #paper_bgcolor = 'white',
-                  width = 1000,
-                  height = 800,
+                  width = 900,
+                  height = 700,
                   )
 
-fig.update_traces(fill = 'toself')
+fig.update_traces(
+                  fill = 'toself',
+                  opacity = 0.4,
+                  )
 
 fig.show()
 
@@ -1120,5 +1096,225 @@ for model_type, model_name in zip(model_types, model_names):
                                      eval_d,
                                      )
 
-"""> End of mh_audit_v1.ipynb (03-28-2024)"""
+"""> End of mh_audit_v1.ipynb (03-28-2024)
 
+### Topic Model: BERTopic
+
+**_Import_**
+"""
+
+# Commented out IPython magic to ensure Python compatibility.
+# %%capture
+# 
+# d = pd.read_excel(
+#                   'd_analysis_pilot.xlsx',
+#                   index_col = 0,
+#                   )
+# 
+# d.shape
+# d.dtypes
+# d.head(3)
+
+"""**_Preprocess_**"""
+
+# Drop annotation artifacts
+
+artifacts = [
+             '<PII>',
+             '[PHONE NUMBER]',
+             ]
+
+for artifact in artifacts:
+    d['text'] = d['text'].str.replace(
+                                      artifact,
+                                      ' ',
+                                      regex = True,
+                                      )
+
+# Convert to lowercase
+
+t_col = d['text'].astype(str).apply(lambda i: i.lower())
+
+# Expand contractions
+
+t_col = t_col.apply(lambda i: ' '.join([contractions.fix(expanded_word) for expanded_word in i.split()]))
+
+# Excise numbers
+
+t_col = t_col.apply(lambda i: re.sub(r'\d+', ' ', i))
+
+# Excise punctuation
+
+t_col = t_col.apply(lambda i: re.sub('[%s]' % re.escape(string.punctuation), ' ' , i))
+
+# Convert diacriticals
+
+t_col = t_col.apply(lambda i: unidecode(i, errors = 'preserve'))
+
+        ### _note_ 10/5: errors = 'preserve': retain if no replacement character possible
+
+# Standardize/correct spelling
+
+t_col = t_col.apply(lambda i: str(TextBlob(i).correct()))
+
+        ### SJS 3/19: ~5 min runtime...
+
+# Update stoplist
+
+sw_nltk = stopwords.words('english')
+sw_add = [
+          'um',
+          ]
+
+sw_nltk.extend(sw_add)
+
+# Apply updated stoplist
+
+d['text'] = t_col.apply(lambda i: ' '.join([ word for word in i.split() if word not in sw_nltk]))
+
+# Inspect
+
+d.head(3)
+d.to_excel('d_inspect.xlsx')
+
+"""**_Baseline: model defaults_**"""
+
+from umap import UMAP
+from sentence_transformers import SentenceTransformer
+
+# Responses - convert to str
+
+texts = [str(responses) for responses in d.text]
+
+# Set random seed
+
+umap_model = UMAP(random_state = 56)
+
+from hdbscan import HDBSCAN
+
+# Tune clustering
+
+hdbscan_model = HDBSCAN(min_cluster_size=5, metric='euclidean', cluster_selection_method='eom', prediction_data=True)
+
+
+
+# Prep embeddings
+
+sentence_model = SentenceTransformer("all-MiniLM-L6-v2")
+embeddings = sentence_model.encode(
+                                   texts,
+                                   show_progress_bar = True,
+                                   )
+
+# Initialize
+
+topic_model = BERTopic(
+                       calculate_probabilities = True,
+                       #nr_topics = 100, ###
+                       #n_gram_range = (1, 3),
+                       #seed_topic_list = seed_topic_list,
+                       min_topic_size = 6,
+                       umap_model = umap_model,
+                       verbose = True,
+                       )
+
+topics, probs = topic_model.fit_transform(
+                                          texts,
+                                          embeddings,
+                                          )
+
+# Tabulate doc-level probabilities of topic inclusion
+
+d_prob = pd.DataFrame(
+                      probs,
+                      columns=[f"topic_{i}" for i in range(probs.shape[1])],
+                      )
+
+# Merge w/ d
+
+d_with_topics = pd.concat(
+                          [
+                           d,
+                           d_prob,
+                           ],
+                          axis = 1,
+                          )
+
+# Inspect
+
+#d_with_topics.head(30)
+d_with_topics.to_csv('d_with_topics.csv', index = True)
+
+"""**_Save_**"""
+
+embedding_model = 'sentence-transformers/all-MiniLM-L6-v2'
+topic_model.save(
+                 'mhp_topic_model_bl',
+                 serialization = 'safetensors',
+                 save_ctfidf = True,
+                 save_embedding_model = embedding_model,
+                 )
+
+"""**_Viz._**"""
+
+topic_model.get_topic_info().head(20).set_index('Topic')
+
+topic_model.visualize_barchart(
+                               width = 280,
+                               height = 330,
+                               top_n_topics = 8,
+                               n_words = 10,
+                               )
+
+topic_model.visualize_topics()
+
+"""### Intra-Textual Causal Inference: CausalNLP
+***
+"""
+
+# Commented out IPython magic to ensure Python compatibility.
+# %%capture
+# 
+# d = pd.read_excel(
+#                   'd_causal_pilot.xlsx',
+#                   index_col = 0,
+#                   )
+# 
+# d.shape
+# d.dtypes
+# d.head(3)
+
+d = d.drop(columns = ['rationale'])
+
+cm = CausalInferenceModel(
+                          d,
+                          method = 't-learner',
+                          treatment_col = 't_bin',
+                          outcome_col = 'engaged_cl',
+                          include_cols = [
+                          #               'index',
+                          #               'text',
+                          #               'prbl',
+                          #               'refl',
+                          #               'just',
+                          #               'afrm',
+                          #               'fitt',
+                          #               'agnt',
+                                         'i_bin',
+                                         #'rationale',
+                          #               '_est_one_class',
+                          #               '_est_two_class',
+                          #               '_est_three_class',
+                          #               '_est_rq_class2_t',
+                          #               '_est_rq_class2',
+                          #               'cpr1',
+                          #               'cpr2',
+                          #               'maxpr',
+                                          ]
+                          )
+cm.fit()
+
+ate = cm.estimate_ate()
+ate
+
+"""> End of mhp_train_test_pilot.ipynb"""
