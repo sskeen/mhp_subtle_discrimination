@@ -4,7 +4,7 @@
 
 ## Pre-analaysis plan
 
-A pre-analysis plan has been preregistered at tk.
+A pre-analysis plan is forthcoming on the Open Science Framework at https://osf.io/wgu8q/.
 
 [^1]: Mirrors the language at https://osf.io/crvs5/
 
