@@ -8,10 +8,10 @@ Original file is located at
 
 ## Linguistic markers of subtle discrimination among mental healthcare professionals
 
-_TKTK_
+_Organizes iterative, independent co-annotation of audit correspondence field experiment responses receievd from mental health professionals. Samples parent study data by co-annotation cycle, computes Cohen's $\kappa$, flags discrepant tagging decisions for in-person deliberation._
 
 > mhp_annotate_iaa_append.ipynb<br>
-> Simone J. Skeen (10-14-2024)
+> Simone J. Skeen (10-17-2024)
 
 1. [Prepare](xx)
 2. [Write](xx)
