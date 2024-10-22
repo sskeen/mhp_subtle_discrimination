@@ -10,7 +10,7 @@ Original file is located at
 
 _WIP - NOT FOR DISTRIBUTION_
 
-_Organizes iterative, independent co-annotation of audit correspondence field experiment responses receievd from mental health professionals. Samples parent study data by co-annotation cycle, computes Cohen's $\kappa$, flags discrepant tagging decisions for in-person deliberation._
+_Organizes iterative, independent co-annotation of audit correspondence field experiment responses receievd from mental health professionals. Samples parent study data by co-annotation cycle, computes Cohen's $\kappa$, flags discrepant tagging decisions for in-person deliberation. Extracts .html profile attribiutes and background vars._
 
 > mhp_annotate_iaa_append.ipynb<br>
 > Simone J. Skeen (10-22-2024)
