@@ -8,15 +8,18 @@ Original file is located at
 
 ## Linguistic markers of subtle discrimination among mental healthcare professionals
 
+_WIP - NOT FOR DISTRIBUTION_
+
 _Organizes iterative, independent co-annotation of audit correspondence field experiment responses receievd from mental health professionals. Samples parent study data by co-annotation cycle, computes Cohen's $\kappa$, flags discrepant tagging decisions for in-person deliberation._
 
 > mhp_annotate_iaa_append.ipynb<br>
-> Simone J. Skeen (10-17-2024)
+> Simone J. Skeen (10-22-2024)
 
-1. [Prepare](xx)
-2. [Write](xx)
-3. [Sample](xx)
-4. [Calculate $\kappa$](xx)
+1. [Prepare](#scrollTo=_nwtco4XT0CL)
+2. [Write](#scrollTo=EavEs0OkbeHT)
+3. [Sample](#scrollTo=c7mqGlB3hHCc)
+4. [Triangulate](#scrollTo=z5y8kU5C-FZJ)
+5. [Extract](#scrollTo=S2aMoYZlA-k3)
 
 ### Prepare
 Installs, imports, and downloads requisite models and packages. Organizes RAP-consistent directory structure.
@@ -25,17 +28,22 @@ Installs, imports, and downloads requisite models and packages. Organizes RAP-co
 **Install**
 """
 
-#%%capture
-
-#!python -m spacy download en_core_web_lg --user
+# Commented out IPython magic to ensure Python compatibility.
+# %%capture
+# 
+# %pip install openai
+# 
+# #!python -m spacy download en_core_web_lg --user
 
 """**Import**"""
 
 import numpy as np
+import openai
 import os
 import pandas as pd
 import re
 import spacy
+import time
 import warnings
 
 from bs4 import BeautifulSoup
@@ -65,6 +73,11 @@ warnings.simplefilter(
                       )
 
 #!python -m prodigy stats
+
+"""**Set env variables**"""
+
+os.environ['OPENAI_API_KEY'] = '<my_key>'
+os.environ
 
 """**Mount gdrive**"""
 
@@ -418,6 +431,76 @@ Writes and imports custom modules
 # 
 #     return d, kappa_results
 
+"""#### gpt_assist.py
+
+**_transform_text_with_gpt_**
+"""
+
+# Commented out IPython magic to ensure Python compatibility.
+# %%writefile gpt_assist.py
+# 
+# import pandas as pd
+# import openai
+# import time
+# 
+# def transform_text_with_gpt(df, input_column, output_column, system_prompt, prompt_template, model='gpt-4o'):
+#     """
+#     Transforms text data in a specified df column using GPT based on provided prompts.
+# 
+#     Args:
+#         df (pd.DataFrame): df containing the text to be transformed.
+#         input_column (str): name of the input column in the df that contains the text to transform.
+#         output_column (str): name of the output column where the transformed text will be stored.
+#         system_prompt (str): system prompt that sets up the assistant's behavior.
+#         prompt_template (str): template string describing the transformation to be applied to each entry.
+#           Use '{input_text}' as a placeholder for the input text.
+#         model (str, optional): The name of the OpenAI GPT model to use (default = 'gpt-4o').
+# 
+#     Returns:
+#         pd.DataFrame: df with new output column added, containing the transformed text.
+#     """
+# 
+#     # Fx to send row-wise API requests
+# 
+#     def call_gpt(input_text):
+#         if pd.isnull(input_text) or input_text.strip() == ' ':
+#             return ' '
+# 
+#         prompt = prompt_template.format(input_text = input_text)
+# 
+#         try:
+#             response = openai.chat.completions.create(
+#                                                       model = model,
+#                                                       messages = [
+#                                                                   {'role': 'system',
+#                                                                    'content': system_prompt},
+#                                                                   {'role': 'user',
+#                                                                    'content': prompt},
+#                                                                   ],
+#                                                       #max_tokens = 500,
+#                                                       #n = 1,
+#                                                       #temperature = 0,
+#                                                       )
+# 
+#             # extract text from API response
+# 
+#             result = response.choices[0].message.content.strip()
+#             return result
+# 
+#         except Exception as e:
+#             print(f"Error processing input text: {input_text}\nError: {str(e)}")
+#             return input_text ### returns input string in case of error
+# 
+#         finally:
+# 
+#             # impose delay between API calls
+# 
+#             time.sleep(1)
+# 
+#     df[output_column] = df[input_column].apply(call_gpt)
+# 
+#     return df
+
 """#### Import"""
 
 from annotate import(
@@ -431,6 +514,10 @@ from annotate import(
 from calculate import(
                       calculate_kappa_by_cycle
                       )
+
+from gpt_assist import(
+                       transform_text_with_gpt
+                       )
 
 """### 3. Sample
 Randomly samples cycle-specific MHP response subsets for annotation.
@@ -544,7 +631,9 @@ d_cycle_2 = sample_by_cycle(
 d_cycle_2.info()
 d_cycle_2.head(3)
 
-"""### 4. Calculate $\kappa$
+"""### 4. Triangulate
+Computes Cohen's $\kappa$, dummy codes discrepant tags for in-person deliberation.
+***
 
 #### Cycle 0
 """
@@ -563,10 +652,17 @@ d, kappa_results = calculate_kappa_by_cycle(1)
 
 d.head(3)
 
-"""### html - pilot"""
+"""### 5. Extract
+Uses substring extraction, regex, and GPT-4 API to restructure .htm and .html into MHP-indexed df of background attributes
+***
+"""
 
 # Commented out IPython magic to ensure Python compatibility.
-# %cd /content/drive/My Drive/Colab/mhp_subtle_discrimination/inputs/html/TEST
+# %cd /content/drive/My Drive/Colab/mhp_subtle_discrimination/inputs/html
+#del d
+
+# Commented out IPython magic to ensure Python compatibility.
+# %cd ../inputs/html
 
 html = [file for file in os.listdir() if file.endswith(('.htm', '.html'))]
 
@@ -603,14 +699,25 @@ for h in html:
                       property = 'og:image',
                       )
 
+    image_alt = soup.find(
+                          'meta',
+                          property = 'og:image:alt',
+                          )
+
+    place = soup.find(
+                      'meta',
+                      attrs = {'name': 'geo.placename'},
+                      )
+
     # extract attribute contents
 
     practice_name_text = name_title['content'] if name_title else '.'
-    #description_text = description['content'] if description else '.'
     profile_url = profile['content'] if profile else '.'
     image_url = image['content'] if image else '.'
+    image_alt_text = image_alt['content'] if image_alt else '.'
+    place_name = place['content'] if place else '.'
 
-    # extract filename as MHP ID#
+    # extract filename as MHP ID
 
     mhp_id = h.replace('.html', ' ').replace('.htm', ' ')
 
@@ -654,22 +761,6 @@ for h in html:
     and end_glance != -1 \
     else '.'
 
-    # Extract the text between "Finances" and "Insurance"
-    #start_finances = full_text.find("Finances", end_glance)
-    #end_finances = full_text.find("Insurance", start_finances)
-    #finances_text = full_text[start_finances + len("Finances"):end_finances].strip() \
-    #if start_finances != -1 \
-    #and end_finances != -1 \
-    #else '.'
-
-    # Extract the text between "Insurance" and "Check fees"
-    #start_insurance = full_text.find("Insurance", end_finances)
-    #end_insurance = full_text.find("Check fees", start_insurance)
-    #insurance_text = full_text[start_insurance + len("Insurance"):end_insurance].strip() \
-    #if start_insurance != -1 \
-    #and end_insurance != -1 \
-    #else '.'
-
     # 'qualifications' str: extract text between "Qualifications" and "Feel free to ask"
 
     start_qualifications = full_text.find("Qualifications")
@@ -679,7 +770,8 @@ for h in html:
     and end_qualifications != -1 \
     else '.'
 
-    # Extract the text between "Top Specialties" and "Do these issues"
+    # 'specialities' str: extract text between "Top Specialties" and "Do these issues"
+
     start_specialties = full_text.find("Top Specialties")
     end_specialties = full_text.find("Do these issues", start_specialties)
     specialties_text = full_text[start_specialties + len("Top Specialties"):end_specialties].strip() \
@@ -687,23 +779,17 @@ for h in html:
     and end_specialties != -1 \
     else '.'
 
-    # Extract the text between "Client Focus" and "Religion"
+    # 'client_focus' str: extract text between "Client Focus" and "Treatment Approach"
+
     start_client = full_text.find("Client Focus")
-    end_client = full_text.find("Religion", start_client)
+    end_client = full_text.find("Treatment Approach", start_client)
     client_text = full_text[start_client + len("Client Focus"):end_client].strip() \
     if start_client != -1 \
     and end_client != -1 \
     else '.'
 
-    # Extract the text between "Religion" and "Treatment Approach"
-    start_religion = full_text.find("Religion")
-    end_religion = full_text.find("Treatment Approach", start_religion)
-    religion_text = full_text[start_religion + len("Religion"):end_religion].strip() \
-    if start_religion != -1 \
-    and end_religion != -1 \
-    else '.'
+    # 'types_of_therapy' str: extract text between "Types of Therapy" and "Ask about what"
 
-    # Extract the text between "Types of Therapy" and "Ask about what"
     start_therapy = full_text.find("Types of Therapy")
     end_therapy = full_text.find("Ask about what", start_therapy)
     therapy_text = full_text[start_therapy + len("Types of Therapy"):end_therapy].strip() \
@@ -711,28 +797,116 @@ for h in html:
     and end_therapy != -1 \
     else '.'
 
+    therapy_text_with_commas = re.sub(r'(?<=[a-z])(?=[A-Z])', ', ', therapy_text)
+    therapy_text_with_commas = re.sub(r'(?<=\))', ', ', therapy_text_with_commas)
+
     # append to list
 
     html_data.append({
-                      'MHP ID#': mhp_id,
+                      'MHP ID': mhp_id,
                       'practice_name': practice_name_text,
                       'pronouns': pronoun_text,
                       'description': description_text,
                       'profile_url': profile_url,
                       'image_url': image_url,
+                      'image_alt_text': image_alt_text,
                       'at_a_glance': glance_text,
-                      #'finance': finances_text,
-                      #'insurance': insurance_text,
                       'qualifications': qualifications_text,
-                      'specialties': specialties_text,
+                      'specialties_raw': specialties_text,
                       'client_focus': client_text,
-                      'religion': religion_text,
-                      'types_of_therapy': therapy_text,
+                      'types_of_therapy': therapy_text_with_commas,
+                      'place_name': place_name,
                       })
 
 # build df
 
 d = pd.DataFrame(html_data)
+
+# 'client_focus' clean + parse
+
+d['client_focus'] = d['client_focus'].str.replace(
+                                                  r'\s+,',
+                                                  ',',
+                                                  regex = True,
+                                                  )
+
+# 'ages' str: extract text following "Age" from 'client_focus'
+
+d['ages'] = d['client_focus'].str.extract(
+                                          r'Age\s*(.*?)\s*Participants',
+                                          flags = re.I,
+                                          )
+
+d['client_focus'] = d['client_focus'].str.replace(
+                                                  'Age',
+                                                  ' ',
+                                                  flags = re.I,
+                                                  regex = True,
+                                                  )
+
+
+# 'participants' str: extract text following "Participants" from 'client_focus'
+
+d['participants'] = d['client_focus'].str.extract(
+                                                  r'Participants\s*(.*?)\s*Communities',
+                                                  flags = re.I,
+                                                  )
+
+d['client_focus'] = d['client_focus'].str.replace(
+                                                  'Participants',
+                                                  ' ',
+                                                  flags = re.I,
+                                                  regex = True,
+                                                  )
+
+# 'communities' str: extract text following "Communities" from 'client_focus'
+
+d['communities'] = d['client_focus'].str.extract(
+                                                 r'Communities\s*(.*?)\s*Ethnicity',
+                                                 flags = re.I,
+                                                 )
+
+d['client_focus'] = d['client_focus'].str.replace(
+                                                  'Communities',
+                                                  ' ',
+                                                  flags = re.I,
+                                                  regex = True,
+                                                  )
+
+# 'ethnicities' str: extract text following "Ethnicity" from 'client_focus'
+
+d['ethnicities'] = d['client_focus'].str.extract(
+                                                 r'Ethnicity\s*(.*?)\s*Religion',
+                                                 flags = re.I,
+                                                 )
+
+d['client_focus'] = d['client_focus'].str.replace(
+                                                  'Ethnicity',
+                                                  ' ',
+                                                  flags = re.I,
+                                                  regex = True,
+                                                  )
+
+
+# 'religions' str: extract text following "Religion" from 'client_focus'
+
+d['religions'] = d['client_focus'].str.extract(
+                                              r'(Religion.*)',
+                                              flags = re.I,
+                                              expand = False,
+                                              )
+
+d['client_focus'] = d['client_focus'].str.replace(
+                                                  r'Religion',
+                                                  ' ',
+                                                  regex = True,
+                                                  )
+
+d['religions'] = d['religions'].str.replace(
+                                            r'Religion',
+                                            ' ',
+                                            regex = True,
+                                            )
 
 # 'finances' str: extract text following "Finances" from 'at_a_glance'
 
@@ -775,8 +949,6 @@ d['availability'] = d['at_a_glance'].str.extract(
 
 d['availability'] = d['availability'].fillna('.')
 
-    ### SJS 9/19: loop over these fillna('.') at end...TKTK
-
 # 'years_in_practice' str: extract from 'qualifications
 
 d['years_in_practice'] = d['qualifications'].str.extract(
@@ -791,27 +963,53 @@ d['years_in_practice'] = pd.to_numeric(
 
 d['years_in_practice'] = d['years_in_practice'].fillna('.')
 
+# 'licensed_by_state' str: extract from 'qualifications
 
-# 'degrees_title' str: extract from full_text
+d['licensed_by_state'] = d['qualifications'].str.extract(r'Licensed by State of ([A-Za-z]+(?: [A-Za-z]+)*)')
 
-d['degrees_title'] = d.apply(lambda row: re.search(rf"{re.escape(row['name'])}\s*(.*?)\s*Specialties and Expertise",
-                                                     full_text).group(1) if re.search(rf"{re.escape(row['name'])}\s*(.*?)\s*Specialties and Expertise",
-                                                     full_text) else '', axis=1)
+# 'license_number' int: extract after "State /"
 
-d['degrees_title'] = d['degrees_title'].str.strip()
+d['license_number'] = d['qualifications'].str.extract(r'/\s*(\d+)')
 
-    ### SJS 9/19: this does _not_ currently work...
+# 'insurance_raw' str: extract from 'finances' - GPT-4o to polish
 
+d['insurance_raw'] = d['finances'].str.extract(r'Insurance\s*(.*)')
+d['insurance_raw'] = d['insurance_raw'].str.replace(
+                                                    r'Check fees.*',
+                                                    ' ',
+                                                    regex = True,
+                                                    )
 
-# housekeeping
+# 'fees' str: extract from 'finances'
+
+d['fees'] = d['finances'].str.extract(r'Fees\s*(.*?)\s*Insurance')
+
+# 'individual_fee' int: extract from 'fees'
+
+d['individual_fee'] = d['fees'].str.extract(r'Individual Sessions\s*\$?(\d+)')
+
+# 'couple_fee' int: extract from 'fees'
+
+d['couple_fee'] = d['fees'].str.extract(r'Couple Sessions\s*\$?(\d+)')
+d['couple_fee'].fillna(
+                       '.',
+                       inplace = True,
+                       )
+
+# 'sliding_scale' bool: extract from 'fee's
+
+d['sliding_scale'] = d['fees'].str.contains(
+                                            'Sliding scale:',
+                                            regex = False,
+                                            ).fillna(False).astype(int)
 
 # delete PT footer from 'practice_name'
 
 d['practice_name'] = d['practice_name'].str.replace(
-                                              '| Psychology Today',
-                                              ' ',
-                                              regex = False,
-                                              )
+                                                    '| Psychology Today',
+                                                    ' ',
+                                                    regex = False,
+                                                    )
 
 # delete contact details from 'description'
 
@@ -841,6 +1039,30 @@ d['description'] = d['description'].str.replace(
                                                 regex = True,
                                                 )
 
+# excise artifacts, 'description'
+
+artifact_re = '^\s*[xX]\d+\s*'
+
+d['description'] = d['description'].str.replace(
+                                                artifact_re,
+                                                ' ',
+                                                regex = True,
+                                                )
+
+d['description'] = d['description'].str.replace(
+                                                '\n',
+                                                ' ',
+                                                regex = True,
+                                                )
+
+# excise leading, excess spaces, 'description'
+
+d['description'] = d['description'].str.strip().str.replace(
+                                                            '\s+',
+                                                            ' ',
+                                                            regex = True,
+                                                            )
+
 # delete duped text (follows "Let's Connect") from 'at_a_glance'
 
 d['at_a_glance'] = d['at_a_glance'].str.replace(
@@ -849,21 +1071,21 @@ d['at_a_glance'] = d['at_a_glance'].str.replace(
                                                 regex = True,
                                                 ).str.strip()
 
-# add space: 'specialties'
+# add space: 'specialties_raw'
 
-d['specialties'] = d['specialties'].str.replace(
-                                                r'([a-z])([A-Z])',
-                                                r'\1 \2',
-                                                regex = True,
-                                                )
+d['specialties_raw'] = d['specialties_raw'].str.replace(
+                                                        r'([a-z])([A-Z])',
+                                                        r'\1 \2',
+                                                        regex = True,
+                                                        )
 
-d['specialties'] = d['specialties'].str.replace(
-                                                r'(\(BPD\)|OCD\)|ADHD|LGBTQ\+|PTSD)',
-                                                r'\1 ',
-                                                regex = True,
-                                                )
+d['specialties_raw'] = d['specialties_raw'].str.replace(
+                                                        r'(\(BPD\)|OCD\)|ADHD|LGBTQ\+|PTSD)',
+                                                        r'\1 ',
+                                                        regex = True,
+                                                        )
 
-d['specialties'] = d['specialties'].str.strip()
+d['specialties_raw'] = d['specialties_raw'].str.strip()
 
 # delete whitespace from 'pronouns'
 
@@ -878,32 +1100,278 @@ d['pronouns'] = d['pronouns'].replace(
                                       regex = True,
                                       )
 
-# reorder
+# replace NaN, empty cells, with "."
 
-d = d.reindex(
-              columns = [
-                         'MHP ID#',
-                         'name',
-                         'pronouns',
-                         'practice_name',
-                         'description',
-                         'profile_url',
-                         'image_url',
-                         'at_a_glance',
-                         'qualifications',
-                         'specialties',
-                         'client_focus',
-                         'religion',
-                         'types_of_therapy',
-                         'finances',
-                         'availability',
-                         'years_in_practice',
-                         'degrees_title',
-                          ]
-              )
+d.fillna(
+         '.',
+         inplace = True,
+         )
+
+d.replace(
+          r'^\s*$', '.',
+          regex = True,
+          inplace = True,
+          )
 
 # inspect
 
+#d
+#d.info()
+#d.head(3)
+
+"""**Dummy code populations**"""
+
+# define Fx: convert str to snake_case
+
+def to_snake_case(term):
+    return term.strip().replace(" ", "_").lower()
+
+# split 'client_focus' populations by commas, explode the lists into separate rows
+
+d['ages_split'] = d['ages'].str.split(",")
+d['communities_split'] = d['communities'].str.split(",")
+d['ethnicities_split'] = d['ethnicities'].str.split(",")
+d['religions_split'] = d['religions'].str.split(",")
+
+# define all unique populations (converted to snake case)
+
+all_ages = set(term for sublist in d['ages_split'] for term in sublist if term)
+all_communities = set(term for sublist in d['communities_split'] for term in sublist if term)
+all_ethnicities = set(term for sublist in d['ethnicities_split'] for term in sublist if term)
+all_religions = set(term for sublist in d['religions_split'] for term in sublist if term)
+
+# dummy code each population
+
+for a in all_ages:
+    age_snake_case = to_snake_case(a)
+    d[age_snake_case] = d['ages'].apply(lambda i: 1 if a in i else 0)
+
+for c in all_communities:
+    community_snake_case = to_snake_case(c)
+    d[community_snake_case] = d['communities'].apply(lambda i: 1 if c in i else 0)
+
+for e in all_ethnicities:
+    ethnicity_snake_case = to_snake_case(e)
+    d[ethnicity_snake_case] = d['ethnicities'].apply(lambda i: 1 if e in i else 0)
+
+for r in all_religions:
+    religion_snake_case = to_snake_case(r)
+    d[religion_snake_case] = d['religions'].apply(lambda i: 1 if r in i else 0)
+
+# drop '*_split' columns
+
+d = d.drop([
+            'ages_split',
+            'communities_split',
+            'ethnicities_split',
+            'religions_split',
+            ],
+            axis = 1,
+            #inplace = True,
+            )
+
+"""**Disambiguate insurers**"""
+
+# retrieve OpenAI API key
+
+openai.api_key = os.getenv('OPENAI_API_KEY')
+
+# define system prompt
+
+system_prompt = """
+You are an expert at recognizing and separating insurer names with commas.
+"""
+
+# define prompt template
+
+prompt_template = """
+Please separate the following run-together insurer names with commas:
+
+{input_text}
+
+Ensure the insurers are properly separated by commas. Return only the comma-separated insurer names without additional text or characters such as newlines.
+
+If there are no insurer names in the input text, return only a single period: '.'
+"""
+
+# transform, inspect
+
+d = transform_text_with_gpt(
+                            d,
+                            'insurance_raw',
+                            'insurance',
+                            system_prompt,
+                            prompt_template,
+                            )
+
+# drop 'raw' col
+
+d = d.drop(
+           'insurance_raw',
+           axis = 1,
+           )
+
+"""**Disambiguate specialties**"""
+
+# retrieve OpenAI API key
+
+openai.api_key = os.getenv('OPENAI_API_KEY')
+
+# define system prompt
+
+system_prompt = """
+You are an expert at recognizing and separating mental health counseling specialties (symptoms, special populations, etc.) with commas.
+"""
+
+# define prompt template
+
+prompt_template = """
+Please separate the following mental health counseling specialties with commas:
+
+{input_text}
+
+Ensure the specialties are properly separated by commas. Return only the comma-separated specialties without additional text or characters such as newlines.
+
+If there are no specialties in the input text, return only a single period: '.'
+"""
+
+# transform, inspect
+
+d = transform_text_with_gpt(
+                            d,
+                            'specialties_raw',
+                            'specialties',
+                            system_prompt,
+                            prompt_template,
+                            )
+
+# drop 'raw' col
+
+d = d.drop(
+           'specialties_raw',
+           axis = 1,
+           )
+
+"""**Extract accreditations**"""
+
+# retrieve OpenAI API key
+
+openai.api_key = os.getenv('OPENAI_API_KEY')
+
+# define system prompt
+
+system_prompt = """
+You are an expert at recognizing the certificates, degrees, and other accreditations of mental health professionals.
+"""
+
+# define prompt template
+
+prompt_template = """
+Please review this text and gather all certificates, degrees, and other accreditations of mental health professionals:
+
+{input_text}
+
+Return all certificates, degrees, and other accreditations of mental health professionals separated by commas. Do not
+add additional text or characters such as newlines.
+
+If there are no accreditations in the input text, return only a single period: '.'
+"""
+
+# transform, inspect
+
+d = transform_text_with_gpt(
+                            d,
+                            'image_alt_text',
+                            'accreditations',
+                            system_prompt,
+                            prompt_template,
+                            )
+
+"""**Housekeeping**"""
+
+d = d.reindex(
+              columns = [
+                         'MHP ID',
+                         'name',
+                         'pronouns',
+                         'accreditations',
+                         'practice_name',
+                         'profile_url',
+                         'image_url',
+                         'image_alt_text',
+                         'place_name',
+                         'description',
+                         'at_a_glance',
+                         'qualifications',
+                         #'client_focus',
+                         #'ages',
+                         #'communities',
+                         #'ethnicities',
+                         #'religions',
+                        'specialties',
+                        'types_of_therapy',
+                        'insurance',
+                        'fees',
+                        'individual_fee',
+                        'couple_fee',
+                        'sliding_scale',
+                        'availability',
+                        'years_in_practice',
+                        'licensed_by_state',
+                        'license_number',
+                        'toddler',
+                        'children_(6_to_10)',
+                        'preteen',
+                        'teen',
+                        'adults',
+                        'elders_(65+)',
+                        'single_mother',
+                        'couples',
+                        'family',
+                        'racial_justice_allied',
+                        'hispanic_and_latino',
+                        'sex_worker_allied',
+                        'hiv_/_aids_allied',
+                        'immuno-disorders',
+                        'gay_allied',
+                        #'.',
+                        'bisexual_allied',
+                        'lesbian_allied',
+                        'non-binary_allied',
+                        'queer_allied',
+                        'intersex_allied',
+                        'transgender_allied',
+                        #'black_and_african_american',
+                        #'christian_____children_(6_to_10)',
+                        #'elders_(65+)____individuals',
+                        #'couples_____deaf_allied',
+                        #'christian_____adults',
+
+                        #'adults____individuals_____bisexual_allied',
+                        #'transgender_allied____black_and_african_american',
+                        #'immuno-disorders__i_also_speak_american_sign_langu__(asl)____christian',
+                        #'transgender_allied____christian',
+                        #'christian_____toddler',
+                        #'elders_(65+)____individuals____christian',
+                        #'group_____bisexual_allied',
+                        #'group____christian',
+                        #'family____christian',
+                        #'adults____individuals',
+                        #'christian_____adults____individuals_____single_mother____black_and_african_american____christian',
+                        #'hispanic_and_latino____christian',
+
+                        #'christian_____teen',
+                        #'elders_(65+)____individuals_____bisexual_allied',
+                          ])
+
+d.rename(
+         columns = {
+                    'children_(6_to_10)': 'children_6_to_10',
+                    'elders_(65+)': 'elders_65_plus',
+                    'hiv_/_aids_allied': 'hiv_aids_allied',
+                    'immuno-disorders': 'immuno_disorders',
+                    }, inplace = True,
+            )
 d.info()
 d.head(3)
 
@@ -913,7 +1381,7 @@ d.head(3)
 
 d.to_excel(
            'd_html.xlsx',
-           index = True,
+           index = False,
            )
 
 """> End of mhp_annotate_iaa_append.ipynb"""
