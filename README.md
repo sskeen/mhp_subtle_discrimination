@@ -4,8 +4,8 @@
 
 ## Pre-analaysis plan
 
-A pre-analysis plan is forthcoming on the Open Science Framework at https://osf.io/wgu8q/.
+A pre-analysis plan is forthcoming on the Open Science Framework at [osf.io/wgu8q/](https://osf.io/wgu8q/).
 
-[^1]: Mirrors the language at https://osf.io/crvs5/
+[^1]: Mirrors the language at [osf.io/crvs5/](https://osf.io/crvs5/).
 
 [^2]: Fumarco L, Harrell BJ, Button P, Schwegman DJ, Dils E. (2024). gender identity-, race-, and ethnicity-based discrimination in access to mental health care: Evidence from an audit correspondence field experiment. _Am J Health Econ._ 2024;10(2):182-214. https://doi.org/10.1086/728931
