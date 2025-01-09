@@ -4,7 +4,7 @@
 
 ## Pre-analaysis plan
 
-A pre-analysis plan is forthcoming on the Open Science Framework at [osf.io/wgu8q/](https://osf.io/wgu8q/).
+A pre-analysis plan is filed on the Open Science Framework at [osf.io/wgu8q/](https://osf.io/wgu8q/).
 
 [^1]: Mirrors the language at [osf.io/crvs5/](https://osf.io/crvs5/).
 
