@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# Env variables (private paths)
+.env
+
+# Prelim training data
+*.xlsx
