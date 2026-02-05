@@ -1,0 +1,115 @@
+# annotation_schema.yaml
+# Per-code qualitative deductive coding configuration for CHALET-style annotation.
+# Simone J. Skeen x Claude Code (02-04-2026)
+
+role: |
+  You are tasked with applying pre-defined qualitative codes to emails by mental health professionals (MHPs)
+  such as counselors, psychologists, and clinical social workers, replying to prospective clients.
+
+  You will be provided a definition, instructions, and key exemplars of text to guide your coding decisions.
+
+codes:
+  afrm:
+    name: Affirm
+    definition: >
+      Responding in a manner that explicitly reinforces prospective client's decision to seek therapy.
+    clarification: |
+      - Affirmation of treatment-seeking must be explicit
+      - Acknowledgements of the difficulty in seeking care fulfill the definition of "Affirm"
+      - Expressions of gratitude alone ("thank you for reaching out") do _not_ fulfill the definition of "Affirm"
+      - Ambiguous positive responses do _not_ fulfill the definition of "Affirm"
+    examples: |
+      Below are human-validated examples of "Affirm"
+
+      "It takes bravery to ask for help, and I'm glad you made the choice <|PII|>."
+
+      "How amazing to take this first step, it can be tough decision to make, but I believe it is often the right one.
+
+  agnt:
+    name: Agent
+    definition: >
+      Interfacing with a prospective client via an automatic message or non-MHP staffer such as a scheduler or office coordinator.
+    clarification: |
+      - Responses in which a clinician responds first, even to hand off to a scheduler, do _not_ fulfill the definition of "Agent."
+    examples: |
+      Below are human-validated examples of "Agent"
+
+      "Thank for choosing <|PII|> Counelling Center. We are eager to assist you. First, please reply to this message with your insurance details."
+
+      "We received your message regarding starting therapy with Dr. <|PII|>. She does currently have availability. We will need the folloing information."
+
+  fitt:
+    name: Fit
+    definition: >
+      Explicitly mentioning the importance of client-MHP rapport, and/or alliance in a client-empowering manner.
+    clarification: |
+      - Characteristic terms may include "fit," "match," "compatibility."
+    examples: |
+      Below are human-validated examples of "Fit"
+
+      "I prefer to schedule a gratis 30-minute call to be sure we'll be a good fit for each other."
+
+      "In the initial session, we can discuss our compatability in working toward your therapy goals."
+
+      "Let's first set aside an introductory session to explore your needs and assess our fit."
+
+  frtn:
+    name: Friction
+    definition: >
+      MHPs interjecting and describing administrative burden as reality of provisioning social services
+    clarification: |
+      - Any response in which an MHP requires >2 additional steps from a client before therapy can begin fulfills the "Friction" definition
+    examples: |
+      Below are human-validated examples of "Friction"
+
+      "Thank you for contacting<|PII|> Services. Before we can arrange an appointment, please take a moment to create an account on our
+      scheduling portal, enter your address and telephone information, and provide valid insurance, including uploading a photo of
+      your insurance card."
+
+  just:
+    name: Justify
+    definition: >
+      Providing a logistical reason for being unable to meet with prospective clientas a personal/professional courtesy.
+    clarification: |
+      - Reasons may include full caseload, geographic bounds of licensure, imminent retirement.
+      - Rejections based on client identity do _not_ fulfill the definition of "Justify."
+    examples: |
+      Below are human-validated examples of "Justify"
+
+      "I would love to be able to help, but my caseload is currently full and I cannot take new clients."
+
+      "Unfortunately I am fully booked through the next few months, and unable to commit to new appointments."
+
+  rbnd:
+    name: Rebound
+    definition: >
+      Multiple burdensome queries imposed on the prospective client in response to appointment-seeking inquiries
+    clarification: |
+      - More than 2 consecutive questions directed at a client fulfill the definition of "Rebound."
+
+      - Consecutive questions may be embedded within a single sentence
+    examples: |
+      Below are human-validated examples of "Rebound"
+
+      "First, does your insurance reimburse formental health and if so whichinsuranceis it?"
+
+      "Are you able to meet in person? Will you require special accomdoations? When did your symptoms begin, and what event kicked them off?"
+
+  refl:
+    name: Reflect
+    definition: >
+      MHPs describing their ability to aid specific symptoms or concerns raised by the client.
+    definition_llama: >
+      MHPs reflecting specific symptoms or concerns.
+    clarification: |
+      - "Reflect" is limited to reflections of prospective clients' symptoms (anxiety, depression, stress)
+      or clear synonyms thereof ("sadness").
+      - "Reflect" does not apply to reflections of clients' identities.
+    examples: |
+      Below are human-validated examples of "Reflect"
+
+      - "It's clear your anxiety is disrupting your life. Let's do what we can to begin your healing journey."
+
+      - "Depression can be a bear. So sorry to hear of your struggles."
+
+      - "We've seen a lot of stress like yours going around lately, but it can be dealt with <|PII|>."

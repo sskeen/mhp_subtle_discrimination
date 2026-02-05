@@ -6,3 +6,7 @@
 
 # Prelim training data
 *.xlsx
+
+# Python
+__pycache__/
+*.pyc
