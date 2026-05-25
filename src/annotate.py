@@ -1,5 +1,5 @@
 """
-qualitative.py
+annotate.py
 Qualitative deductive coding functions for CHALET-style LLM-human annotation.
 
 Simone J. Skeen x Claude Code (02-04-2026)
@@ -12,7 +12,16 @@ import time
 import openai
 import pandas as pd
 import requests
+import spacy
 import yaml
+from sklearn.metrics import cohen_kappa_score
+
+
+# ---------------------------------------------------------------------------
+# SpaCy model
+# ---------------------------------------------------------------------------
+
+nlp = spacy.load('en_core_web_lg')
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +177,7 @@ def build_prompts_per_code(config, aliases, backend="gpt"):
 
 
 # ---------------------------------------------------------------------------
-# Coding functions
+# LLM coding functions
 # ---------------------------------------------------------------------------
 
 def code_texts_deductively_llama(
@@ -357,3 +366,316 @@ def code_texts_deductively_gpt(df, prompts_per_code, client=None):
             time.sleep(1)
 
     return df
+
+
+# ---------------------------------------------------------------------------
+# Data preprocessing
+# ---------------------------------------------------------------------------
+
+def remove_index_artifacts(df):
+    """
+    Remove '/;' index artifact from DataFrame if present.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        The DataFrame to clean.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Cleaned DataFrame with artifact removed.
+    """
+    if df.index.name == '/;':
+        df = df.reset_index()
+    if '/;' in df.columns:
+        df = df.drop(columns=['/;'])
+    return df
+
+
+def condense_response_frame(d, pilot_value = 0):
+    """
+    Reduce and de-identify response dataframe.
+
+    Parameters
+    ----------
+    d : pandas.DataFrame
+        The DataFrame to process.
+    pilot_value : int, optional
+        Value to assign to the 'pilot' column. Default is 0.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Processed DataFrame with selected columns.
+    """
+    # reduce and de-identify
+
+    d.drop([
+        'Email Address', 'Client Name',
+        'INBOX Line', 'RAW Message',
+        ],
+        axis = 1,
+        inplace = True,)
+
+    # 'pilot' var
+
+    d['pilot'] = pilot_value
+
+    # float to int
+
+    cols_to_int = ['EmailPairID', 'WithinPatientID', 'MHP ID']
+    d[cols_to_int] = d[cols_to_int].fillna(0).round().astype(int)
+
+    # drop junk rows
+
+    d = d[d['Unique ID'] != "___"]
+
+    # rename, reformat
+
+    d = d.rename(columns = {'Cleaned Message': 'text'})
+
+    d = d[[
+        'EmailPairID', 'WithinPatientID', 'FirstInPair',
+        'MHP ID', 'Unique ID', 'pilot', 'text',
+        ]]
+
+    return d
+
+
+def ner_redact_response_texts(mhp_text):
+    """
+    Redacts all named entities recognized by spaCy EntityRecognizer, replaces with <|PII|> pseudo-word token.
+
+    Parameters
+    ----------
+    mhp_text : str
+        The text to redact.
+
+    Returns
+    -------
+    str
+        Text with named entities replaced by <|PII|>.
+    """
+    ne = list([
+        'PERSON', 'NORP', 'FAC', 'ORG',
+        'GPE', 'LOC', 'PRODUCT', 'EVENT',
+        ])
+
+    doc = nlp(mhp_text)
+    ne_to_remove = []
+    final_string = str(mhp_text)
+    for sent in doc.ents:
+        if sent.label_ in ne:
+            ne_to_remove.append(str(sent.text))
+    for i in range(len(ne_to_remove)):
+        final_string = final_string.replace(
+            ne_to_remove[i],
+            '<|PII|>',
+            )
+    return final_string
+
+
+# ---------------------------------------------------------------------------
+# Sampling & inter-rater reliability
+# ---------------------------------------------------------------------------
+
+def sample_by_cycle(d_pilot, sample_size, cycle_number):
+    """
+    Creates random subsample of d_pilot, excises prior tags, and unneeded columns,
+    exports to .xlsx for human annotation.
+
+    Parameters:
+    -----------
+
+    d_pilot : pd.DataFrame
+        The d_pilot df in memory.
+
+    sample_size : int
+        The number of rows to sample from d_pilot.
+
+    cycle_number : int
+        The cycle number used to name the output dataframe and the Excel file.
+
+    Returns:
+    --------
+    pd.DataFrame
+        A new dataframe called d_cycle_{cycle_number} after applying the operations.
+    """
+
+    d_cycle = d_pilot.sample(
+        n = sample_size,
+        #random_state = 56,
+        )
+
+    # reset index
+
+    d_cycle.reset_index(
+        drop = True,
+        inplace = True,
+        )
+
+    # DAL themes
+
+    d_cycle['brdn'] = ' '
+    d_cycle['dmnd'] = ' '
+    d_cycle['rbnd'] = ' '
+
+    # excise prior tags
+
+    tag_cols = [
+        'prbl', 'refl', 'just', 'afrm', 'fitt', 'agnt',
+        'brdn', 'dmnd', 'rbnd', 'rtnl', 'note',
+        ]
+
+    d_cycle[tag_cols] = ' '
+
+    # excise unneeded columns
+
+    drop_cols = [
+        'EmailPairID', 'WithinPatientID', 'FirstInPair',
+        #'pilot', 'MHP ID#',
+        ]
+
+    d_cycle.drop(
+        columns = drop_cols,
+        axis = 1,
+        inplace = True,
+        )
+
+    # export
+
+    filename = f'd_cycle_{cycle_number}.xlsx'
+
+    d_cycle.to_excel(
+        filename,
+        index = True,
+        )
+
+    return d_cycle
+
+
+def calculate_kappa_by_cycle(cycle_num):
+    """
+    Calculate Cohen's Kappa and encode disagreements between independent annotators across multiple cycles.
+
+    Parameters:
+    --------
+    cycle_num : int
+        Annotation cycle number, used to load the corresponding Excel files (e.g., cycle 0, cycle 1).
+
+    Returns:
+    --------
+    d : pd.DataFrame
+        Processed df after merging, includes encoded disagreements in *_dis columns.
+
+    kappa_results : dict
+        A dictionary containing the Cohen's Kappa scores for each indepednently co-annotated target.
+    """
+    # read independently annotated files
+
+    d_dal = pd.read_excel(f'd_cycle_{cycle_num}_dal.xlsx', index_col = [0])
+    d_dal.columns = [f'{col}_dal' for col in d_dal.columns]
+
+    d_sjs = pd.read_excel(f'd_cycle_{cycle_num}_sjs.xlsx', index_col = [0])
+    d_sjs.columns = [f'{col}_sjs' for col in d_sjs.columns]
+
+    # merge
+
+    d = pd.merge(
+        d_dal,
+        d_sjs,
+        left_index = True,
+        right_index = True,
+        )
+
+    # housekeeping
+
+    targets = [
+        'afrm_dal', 'afrm_sjs', 'agnt_dal', 'agnt_sjs', 'brdn_dal', 'brdn_sjs',
+        'dmnd_dal', 'dmnd_sjs', 'fitt_dal', 'fitt_sjs', 'just_dal', 'just_sjs',
+        'prbl_dal', 'prbl_sjs', 'rbnd_dal', 'rbnd_sjs', 'refl_dal', 'refl_sjs',
+        ]
+
+    texts = [
+        'text_dal', 'text_sjs',
+        'rtnl_dal', 'rtnl_sjs',
+        'note_dal', 'note_sjs',
+        ]
+
+    d[targets] = d[targets].apply(
+        pd.to_numeric,
+        errors = 'coerce',
+        )
+    d[targets] = d[targets].fillna(0)
+    d[texts] = d[texts].replace(' ', '.')
+
+    d = d[[
+        'text_dal',
+        'afrm_dal', 'afrm_sjs', 'agnt_dal', 'agnt_sjs', 'brdn_dal', 'brdn_sjs',
+        'dmnd_dal', 'dmnd_sjs', 'fitt_dal', 'fitt_sjs', 'just_dal', 'just_sjs',
+        'prbl_dal', 'prbl_sjs', 'rbnd_dal', 'rbnd_sjs', 'refl_dal', 'refl_sjs',
+        'rtnl_dal', 'rtnl_sjs', 'note_dal', 'note_sjs',
+        ]].copy()
+
+    # kappa fx
+
+    def calculate_kappa(d, col_dal, col_sjs):
+        return cohen_kappa_score(d[col_dal], d[col_sjs])
+
+    col_pairs = [
+        ('afrm_dal', 'afrm_sjs'), ('agnt_dal', 'agnt_sjs'), ('brdn_dal', 'brdn_sjs'),
+        ('dmnd_dal', 'dmnd_sjs'), ('fitt_dal', 'fitt_sjs'), ('just_dal', 'just_sjs'),
+        ('prbl_dal', 'prbl_sjs'), ('rbnd_dal', 'rbnd_sjs'), ('refl_dal', 'refl_sjs'),
+        ]
+
+    # initialize dict
+
+    kappa_results = {}
+
+    # kappa loop
+    print("\n--------------------------------------------------------------------------------------")
+    print(f"Cycle {cycle_num}: Cohen's Kappa by target")
+    print("--------------------------------------------------------------------------------------")
+
+    for col_dal, col_sjs in col_pairs:
+        kappa = calculate_kappa(d, col_dal, col_sjs)
+        kappa_results[f'{col_dal} and {col_sjs}'] = kappa
+
+    for pair, kappa in kappa_results.items():
+        print(f"{pair} Kappa = {kappa:.2f}")
+
+    # dummy code disagreements fx
+
+    def encode_disagreements(row):
+        return 1 if row[0] != row[1] else 0
+
+    col_dis = [
+        ('afrm_dal', 'afrm_sjs', 'afrm_dis'), ('agnt_dal', 'agnt_sjs', 'agnt_dis'), ('brdn_dal', 'brdn_sjs', 'brdn_dis'),
+        ('dmnd_dal', 'dmnd_sjs', 'dmnd_dis'), ('fitt_dal', 'fitt_sjs', 'fitt_dis'), ('just_dal', 'just_sjs', 'just_dis'),
+        ('prbl_dal', 'prbl_sjs', 'prbl_dis'), ('rbnd_dal', 'rbnd_sjs', 'rbnd_dis'), ('refl_dal', 'refl_sjs', 'refl_dis'),
+        ]
+
+    for col1, col2, dis_col in col_dis:
+        d[dis_col] = d[[col1, col2]].apply(encode_disagreements, axis = 1)
+
+    # display counts for targets
+
+    print("\n--------------------------------------------------------------------------------------")
+    print(f"Cycle {cycle_num}: Counts by target")
+    print("--------------------------------------------------------------------------------------")
+    print(d[targets].apply(pd.Series.value_counts))
+
+    # drop target cols for readability + fillna
+
+    d = d.drop(
+        targets,
+        axis = 1,
+        )
+    d = d.fillna('.')
+
+    # export: cycle-specific
+
+    d.to_excel(f'd_cycle_{cycle_num}_dis.xlsx')
+
+    return d, kappa_results
