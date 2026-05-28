@@ -58,18 +58,6 @@ codes:
       "In the initial session, we can discuss our compatability in working toward your therapy goals."
       "Let's first set aside an introductory session to explore your needs and assess our fit."
 
-  just:
-    name: Justify
-    definition: >
-      Providing a logistical reason for being unable to meet with prospective clientas a personal/professional courtesy.
-    clarification: |
-      - Reasons may include full caseload, geographic bounds of licensure, imminent retirement.
-      - Rejections based on client identity do _not_ fulfill the definition of "Justify."
-    examples: |
-      Below are human-validated examples of "Justify"
-      "I would love to be able to help, but my caseload is currently full and I cannot take new clients."
-      "Unfortunately I am fully booked through the next few months, and unable to commit to new appointments."
-
   rbnd:
     name: Rebound
     definition: >
