@@ -100,10 +100,10 @@ You will be provided with a piece of text. For each piece of text:
 - If it meets the definition of "{name}," respond with "{alias}_1"
 - Otherwise, respond with "0".
 - You must choose a "{alias}_1" or a "0" response.
-- If your response is "{alias}_1," then begin a new paragraph with "{alias}"_rationale:" and excerpt the sentences or
+- If your response is "{alias}_1," then begin a new paragraph with "{alias}_rationale:" and excerpt the sentences or
 phrases that determined your decision. You are allowed to choose multiple sentences or phrases, divided by an
 "<|SPL|>" token.
-- Then, whether you have selected a "{alias}_1" or a "0" begin a new paragraph with "{alias}_explanation:" and provide
+- Then, whether you have selected a "{alias}_1" or a "0," begin a new paragraph with "{alias}_explanation:" and provide
 a two sentence explanation for your response.
 """
 
@@ -208,7 +208,7 @@ def code_texts_deductively_gpt(df, prompts_per_code, client=None):
             if result == "error":
                 continue
 
-            rationale, explanation = None, None
+            rationale = None
 
             if f"{tag}_1" in result:
                 tag_value = 1
@@ -219,13 +219,15 @@ def code_texts_deductively_gpt(df, prompts_per_code, client=None):
                     if f"{tag}_rationale:" in result
                     else None
                 )
-                explanation = (
-                    result.split(f"{tag}_explanation:")[1].strip()
-                    if f"{tag}_explanation:" in result
-                    else None
-                )
             else:
                 tag_value = 0
+
+            # Extract explanation for all decisions
+            explanation = (
+                result.split(f"{tag}_explanation:")[1].strip()
+                if f"{tag}_explanation:" in result
+                else None
+            )
 
             df.at[index, f"{tag}_gpt"] = tag_value
             df.at[index, f"{tag}_rtnl_gpt"] = rationale
@@ -304,7 +306,7 @@ def code_texts_deductively_qwen(df, prompts_per_code, model_name='qwen3:30b'):
             if result == "error":
                 continue
 
-            rationale, explanation = None, None
+            rationale = None
 
             if f"{tag}_1" in result:
                 tag_value = 1
@@ -315,13 +317,15 @@ def code_texts_deductively_qwen(df, prompts_per_code, model_name='qwen3:30b'):
                     if f"{tag}_rationale:" in result
                     else None
                 )
-                explanation = (
-                    result.split(f"{tag}_explanation:")[1].strip()
-                    if f"{tag}_explanation:" in result
-                    else None
-                )
             else:
                 tag_value = 0
+
+            # Extract explanation for all decisions
+            explanation = (
+                result.split(f"{tag}_explanation:")[1].strip()
+                if f"{tag}_explanation:" in result
+                else None
+            )
 
             df.at[index, f"{tag}_qwen"] = tag_value
             df.at[index, f"{tag}_rtnl_qwen"] = rationale
