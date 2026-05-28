@@ -2,7 +2,7 @@
 annotate.py
 Qualitative deductive coding functions for CHALET-style LLM-human annotation.
 
-Simone J. Skeen x Claude Code (02-04-2026)
+Simone J. Skeen x Claude Code (05-28-2026)
 """
 
 import os
@@ -237,101 +237,31 @@ def code_texts_deductively_gpt(df, prompts_per_code, client=None):
 
     return df
 
-
-def code_instance_deductively_qwen(text, prompts, model_name='qwen3:30b'):
+def majority_vote_gpt(df, codes):
     """
-    Applies annotation decisions, based on multiple prompts, to a given
-    text using local Ollama with Qwen; provides rationale and explanation.
+    Create triangulated columns based on agreement between human and GPT annotations.
 
-    Parameters
-    ----------
-    text : str
-        The text to annotate.
-    prompts : list[str]
-        A list of prompts to apply to the text.
-    model_name : str, optional
-        The Ollama model to use. Default is 'qwen3:30b'.
-
-    Returns
-    -------
-    str
-        The combined result from all prompts.
-    """
-    try:
-        prompt_content = " ".join(prompts)
-
-        response = ollama.chat(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": prompt_content},
-                {"role": "user", "content": text},
-            ],
-            options={"temperature": 0.2},
-        )
-
-        result = response['message']['content']
-        print(f"{text[:50]}...: {result[:100]}...")
-        return result
-
-    except Exception as e:
-        print(f"Exception: {e}")
-        return "error"
-
-
-def code_texts_deductively_qwen(df, prompts_per_code, model_name='qwen3:30b'):
-    """
-    Applies code_instance_deductively_qwen for multiple codes to each
-    row in dataframe 'df'.
+    For each code, creates a new column '{code}_triangulate' with value 1 if both
+    the human annotation ({code}) and GPT annotation ({code}_gpt) equal 1.
 
     Parameters
     ----------
     df : pandas.DataFrame
-        The dataframe containing texts to annotate.
-    prompts_per_code : dict
-        A dictionary with tag names as keys and a list of prompts
-        as values.
-    model_name : str, optional
-        The Ollama model to use. Default is 'qwen3:30b'.
+        The dataframe containing human and GPT annotations.
+    codes : list[str]
+        List of code aliases to triangulate (e.g., ['afrm', 'agnt', 'fitt']).
 
     Returns
     -------
     pandas.DataFrame
-        The updated dataframe with annotation results.
+        The dataframe with new '{code}_triangulate' columns added.
     """
-    for index, row in df.iterrows():
-        for tag, prompts in prompts_per_code.items():
-            result = code_instance_deductively_qwen(
-                row["text"], prompts, model_name=model_name,
-            )
-            if result == "error":
-                continue
+    for code in codes:
+        human_col = code
+        gpt_col = f"{code}_gpt"
+        triangulate_col = f"{code}_triangulate"
 
-            rationale = None
-
-            if f"{tag}_1" in result:
-                tag_value = 1
-                rationale = (
-                    result.split(f"{tag}_rationale:")[1]
-                    .split(f"{tag}_explanation:")[0]
-                    .strip()
-                    if f"{tag}_rationale:" in result
-                    else None
-                )
-            else:
-                tag_value = 0
-
-            # Extract explanation for all decisions
-            explanation = (
-                result.split(f"{tag}_explanation:")[1].strip()
-                if f"{tag}_explanation:" in result
-                else None
-            )
-
-            df.at[index, f"{tag}_qwen"] = tag_value
-            df.at[index, f"{tag}_rtnl_qwen"] = rationale
-            df.at[index, f"{tag}_expl_qwen"] = explanation
-
-            time.sleep(0.5)  # brief pause between calls
+        df[triangulate_col] = ((df[human_col] == 1) & (df[gpt_col] == 1)).astype(int)
 
     return df
 

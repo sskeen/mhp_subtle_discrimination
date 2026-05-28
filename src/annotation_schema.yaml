@@ -1,6 +1,6 @@
 # annotation_schema.yaml
 # Per-code qualitative deductive coding configuration for CHALET-style annotation.
-# Simone J. Skeen x Claude Code (02-04-2026)
+# Simone J. Skeen x Claude Code (05-28-2026)
 
 role: |
   You are tasked with applying pre-defined qualitative codes to emails by mental health professionals (MHPs)
@@ -20,9 +20,7 @@ codes:
       - Ambiguous positive responses do _not_ fulfill the definition of "Affirm"
     examples: |
       Below are human-validated examples of "Affirm"
-
       "It takes bravery to ask for help, and I'm glad you made the choice <|PII|>."
-
       "How amazing to take this first step, it can be tough decision to make, but I believe it is often the right one.
 
   agnt:
@@ -33,10 +31,20 @@ codes:
       - Responses in which a clinician responds first, even to hand off to a scheduler, do _not_ fulfill the definition of "Agent."
     examples: |
       Below are human-validated examples of "Agent"
-
       "Thank for choosing <|PII|> Counelling Center. We are eager to assist you. First, please reply to this message with your insurance details."
-
       "We received your message regarding starting therapy with Dr. <|PII|>. She does currently have availability. We will need the folloing information."
+
+  brdn:
+    name: Burden
+    definition: >
+      MHPs interjecting and describing administrative burden as reality of provisioning social services
+    clarification: |
+      - Any response in which an MHP requires >2 additional steps from a client before therapy can begin fulfills the "Friction" definition
+    examples: |
+      Below are human-validated examples of "Burden"
+      "Thank you for contacting<|PII|> Services. Before we can arrange an appointment, please take a moment to create an account on our
+      scheduling portal, enter your address and telephone information, and provide valid insurance, including uploading a photo of
+      your insurance card."
 
   fitt:
     name: Fit
@@ -46,25 +54,9 @@ codes:
       - Characteristic terms may include "fit," "match," "compatibility."
     examples: |
       Below are human-validated examples of "Fit"
-
       "I prefer to schedule a gratis 30-minute call to be sure we'll be a good fit for each other."
-
       "In the initial session, we can discuss our compatability in working toward your therapy goals."
-
       "Let's first set aside an introductory session to explore your needs and assess our fit."
-
-  frtn:
-    name: Friction
-    definition: >
-      MHPs interjecting and describing administrative burden as reality of provisioning social services
-    clarification: |
-      - Any response in which an MHP requires >2 additional steps from a client before therapy can begin fulfills the "Friction" definition
-    examples: |
-      Below are human-validated examples of "Friction"
-
-      "Thank you for contacting<|PII|> Services. Before we can arrange an appointment, please take a moment to create an account on our
-      scheduling portal, enter your address and telephone information, and provide valid insurance, including uploading a photo of
-      your insurance card."
 
   just:
     name: Justify
@@ -75,9 +67,7 @@ codes:
       - Rejections based on client identity do _not_ fulfill the definition of "Justify."
     examples: |
       Below are human-validated examples of "Justify"
-
       "I would love to be able to help, but my caseload is currently full and I cannot take new clients."
-
       "Unfortunately I am fully booked through the next few months, and unable to commit to new appointments."
 
   rbnd:
@@ -86,13 +76,10 @@ codes:
       Multiple burdensome queries imposed on the prospective client in response to appointment-seeking inquiries
     clarification: |
       - More than 2 consecutive questions directed at a client fulfill the definition of "Rebound."
-
       - Consecutive questions may be embedded within a single sentence
     examples: |
       Below are human-validated examples of "Rebound"
-
       "First, does your insurance reimburse formental health and if so whichinsuranceis it?"
-
       "Are you able to meet in person? Will you require special accomdoations? When did your symptoms begin, and what event kicked them off?"
 
   refl:
@@ -107,9 +94,6 @@ codes:
       - "Reflect" does not apply to reflections of clients' identities.
     examples: |
       Below are human-validated examples of "Reflect"
-
-      - "It's clear your anxiety is disrupting your life. Let's do what we can to begin your healing journey."
-
-      - "Depression can be a bear. So sorry to hear of your struggles."
-
-      - "We've seen a lot of stress like yours going around lately, but it can be dealt with <|PII|>."
+      "It's clear your anxiety is disrupting your life. Let's do what we can to begin your healing journey."
+      "Depression can be a bear. So sorry to hear of your struggles."
+      "We've seen a lot of stress like yours going around lately, but it can be dealt with <|PII|>."
