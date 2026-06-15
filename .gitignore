@@ -7,9 +7,6 @@
 # Prelim training data
 *.xlsx
 
-# Annotation subdirectory
-annotation/
-
 # Pilot data subdirectory
 data/
 
