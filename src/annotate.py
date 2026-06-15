@@ -52,8 +52,8 @@ def load_annotation_config(yaml_path = None):
     Parameters
     ----------
     yaml_path : str, optional
-        Path to annotation_schema.yaml. Defaults to annotation_schema.yaml in the same
-        directory as this module.
+        Path to annotation_schema.yaml. Defaults to annotation/schema/annotation_schema.yaml
+        relative to the project root.
 
     Returns
     -------
@@ -61,7 +61,9 @@ def load_annotation_config(yaml_path = None):
         Parsed YAML configuration with 'role' and 'codes' keys.
     """
     if yaml_path is None:
-        yaml_path = os.path.join(os.path.dirname(__file__), "annotation_schema.yaml")
+        # Navigate from src/ to project root, then to annotation/schema/
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        yaml_path = os.path.join(project_root, "annotation", "schema", "annotation_schema.yaml")
     with open(yaml_path, "r") as f:
         return yaml.safe_load(f)
 
